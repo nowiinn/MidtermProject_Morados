@@ -1,16 +1,14 @@
 ﻿using System;
 using System.IO;
 using System.Collections.Generic;
-using System.Text.Json;
 
 namespace Midterm
 {
     class Program
     {
         static string folderPath = @"C:\Users\eshan\OneDrive\Desktop\MidtermProject";
-
-        static string studentFile = "students.json";
-        static string gradeFile = "grades.json";
+        static string dataFile = "student_data.txt";
+        static string fullPath = Path.Combine(folderPath, dataFile);
 
         static void PrintTop()
         {
@@ -48,6 +46,13 @@ namespace Midterm
 
         static void Main(string[] args)
         {
+
+            if (!Directory.Exists(folderPath))
+            {
+                Directory.CreateDirectory(folderPath);
+            }
+
+
             while (true)
             {
                 PrintMenu();
@@ -326,22 +331,9 @@ namespace Midterm
 
                 // SAVE TO FILE
                 string birth = birthdate.ToShortDateString();
+                string record = $"R|{first}|{mid}|{last}|{birth}|{age}|{address}|{contact}|{course}|{year}";
 
-                var student = new
-                {
-                    FirstName = first,
-                    MiddleInitial = mid,
-                    LastName = last,
-                    Birthdate = birth,
-                    Age = age,
-                    Address = address,
-                    Contact = contact,
-                    Course = course,
-                    Year = year
-                };
-
-                string json = JsonSerializer.Serialize(student);
-                File.AppendAllText(Path.Combine(folderPath, studentFile), json + Environment.NewLine);
+                File.AppendAllText(fullPath, record + Environment.NewLine);
 
                 Console.WriteLine("Student Registered!");
 
@@ -470,16 +462,10 @@ namespace Midterm
 
                 // SAVE TO FILE
                 string subject = allowedSubjects[subjectChoice - 1];
+                string record = $"E|{name}|{id}|{subject}";
 
-                var subjectData = new
-                {
-                    LastName = name,
-                    SubjectID = id,
-                    SubjectName = subject
-                };
+                File.AppendAllText(fullPath, record + Environment.NewLine);
 
-                string json = JsonSerializer.Serialize(subjectData);
-                File.AppendAllText("subjects.json", json + Environment.NewLine);
                 Console.WriteLine($"Subject '{subject}' Enrolled for {name}!");
 
                 // ENROLL ANOTHER SUBJECT?
@@ -588,15 +574,10 @@ namespace Midterm
                 }
 
                 // SAVE TO FILE
-                var gradeData = new
-                {
-                    LastName = name,
-                    SubjectID = id,
-                    Grade = grade
-                };
+                string record = $"G|{name}|{id}|{grade}";
 
-                string json = JsonSerializer.Serialize(gradeData);
-                File.AppendAllText(Path.Combine(folderPath, gradeFile), json + Environment.NewLine);
+                File.AppendAllText(fullPath, record + Environment.NewLine);
+
                 Console.WriteLine($"Grade {grade} saved for {name}, Subject ID: {id}!");
 
                 // ENTER ANOTHER GRADE?
@@ -633,27 +614,119 @@ namespace Midterm
             Console.Write("Enter Student Last Name: ");
             string search = Console.ReadLine();
 
-            if (!File.Exists(Path.Combine(folderPath, gradeFile)))
+            if (!File.Exists(fullPath))
             {
-                Console.WriteLine("No grades recorded.");
+                Console.WriteLine("No data recorded.");
                 return;
             }
 
-            string[] lines = File.ReadAllLines(Path.Combine(folderPath, gradeFile));
+            string[] lines = File.ReadAllLines(fullPath);
 
-            Console.WriteLine();
-            Console.WriteLine(search);
-            Console.WriteLine();
+            // Variables to store student info
+            string firstName = "";
+            string lastName = "";
+            string course = "";
+            int year = 0;
 
+            // Lists to store subjects and grades
+            List<string> subjects = new List<string>();
+            List<int> subjectIds = new List<int>();
+            List<int> grades = new List<int>();
+
+            // First, find the student's registration record
             foreach (string line in lines)
             {
-                var grade = JsonSerializer.Deserialize<Dictionary<string, object>>(line);
+                string[] parts = line.Split('|');
 
-                if (grade["LastName"].ToString().Equals(search, StringComparison.OrdinalIgnoreCase))
+                if (parts[0] == "R" && parts[3].Equals(search, StringComparison.OrdinalIgnoreCase))
                 {
-                    Console.WriteLine("Subject ID: " + grade["SubjectID"] +
-                                      " -------- " + grade["Grade"]);
+                    // R|First|Middle|Last|Birth|Age|Address|Contact|Course|Year
+                    firstName = parts[1];
+                    lastName = parts[3];
+                    course = parts[8];
+                    year = int.Parse(parts[9]);
+                    break;
                 }
+            }
+
+            // If student not found
+            if (string.IsNullOrEmpty(lastName))
+            {
+                Console.WriteLine("Student not found.");
+                return;
+            }
+
+            // Find all enrolled subjects for this student
+            foreach (string line in lines)
+            {
+                string[] parts = line.Split('|');
+
+                if (parts[0] == "E" && parts[1].Equals(search, StringComparison.OrdinalIgnoreCase))
+                {
+                    // E|LastName|SubjectID|SubjectName
+                    subjectIds.Add(int.Parse(parts[2]));
+                    subjects.Add(parts[3]);
+                }
+            }
+
+            // Find all grades for this student
+            foreach (string line in lines)
+            {
+                string[] parts = line.Split('|');
+
+                if (parts[0] == "G" && parts[1].Equals(search, StringComparison.OrdinalIgnoreCase))
+                {
+                    // G|LastName|SubjectID|Grade
+                    grades.Add(int.Parse(parts[3]));
+                }
+            }
+
+            // Display in the required format
+            Console.WriteLine();
+            Console.WriteLine($"{lastName}, {firstName}");
+            Console.WriteLine($"{course} – {year}");
+            Console.WriteLine();
+
+            // Display subjects with grades (if grades exist)
+            if (subjects.Count > 0)
+            {
+                for (int i = 0; i < subjects.Count; i++)
+                {
+                    string gradeValue = "___"; // Default if no grade yet
+
+                    // Check if we have a grade for this subject
+                    if (i < grades.Count)
+                    {
+                        // Convert 0-100 scale to 1.0-5.0 scale
+                        int percentGrade = grades[i];
+                        double finalGrade;
+
+                        if (percentGrade >= 97) finalGrade = 1.0;
+                        else if (percentGrade >= 94) finalGrade = 1.25;
+                        else if (percentGrade >= 91) finalGrade = 1.5;
+                        else if (percentGrade >= 88) finalGrade = 1.75;
+                        else if (percentGrade >= 85) finalGrade = 2.0;
+                        else if (percentGrade >= 82) finalGrade = 2.25;
+                        else if (percentGrade >= 79) finalGrade = 2.5;
+                        else if (percentGrade >= 76) finalGrade = 2.75;
+                        else if (percentGrade >= 75) finalGrade = 3.0;
+                        else finalGrade = 5.0;
+
+                        gradeValue = finalGrade.ToString("F1");
+                    }
+
+                    // Pad the subject name to align the grades
+                    Console.WriteLine($"{subjects[i]} ______ {gradeValue}");
+                }
+            }
+            else
+            {
+                Console.WriteLine("No subjects enrolled.");
+            }
+
+            if (grades.Count == 0)
+            {
+                Console.WriteLine("\nNote: This student has enrolled subjects but no grades have been entered yet.");
             }
         }
     }
